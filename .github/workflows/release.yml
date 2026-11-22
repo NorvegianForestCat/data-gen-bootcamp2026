@@ -27,7 +27,7 @@ jobs:
               with:
                   context: .
                   push: true
-                  tags: ghcr.io/NorvegianForestCat/data-gen-bootcamp2026:latest
+                  tags: ghcr.io/norvegianforestcat/data-gen-bootcamp2026:latest
 
             - name: Build release binary
               run: cargo build --release
