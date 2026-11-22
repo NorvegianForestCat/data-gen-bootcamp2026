@@ -6,14 +6,17 @@ use std::path::PathBuf;
 #[command(name = "dota-data-generator")]
 #[command(about = "Dota 2 Data Generator for Bootcamp 2026")]
 struct Args {
-    #[arg(short, long, default_value = "config/default.toml")]
-    config: PathBuf,
+    #[arg(long, env = "POSTGRES_URL")]
+    postgres_url: String,
 
-    #[arg(short, long)]
-    matches: Option<u32>,
+    #[arg(long, env = "MONGO_URL")]
+    mongo_url: String,
 
-    #[arg(short, long)]
-    seed: Option<u64>,
+    #[arg(long, env = "MATCHES", default_value_t = 1000)]
+    matches_count: usize,
+
+    #[arg(long, env = "SEED", default_value_t = 42)]
+    seed: u64,
 }
 
 mod config;
@@ -24,31 +27,29 @@ mod rng;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let mut cfg = config::Config::load(&args.config)?;
+    let postgres_url = args.postgres_url;
+    let mongo_url = args.mongo_url;
+    let matches_count = args.matches_count;
+    let seed = args.seed;
 
-    if let Some(m) = args.matches {
-        cfg.generation.matches_count = m;
-    }
-    if let Some(s) = args.seed {
-        cfg.generation.seed = s;
-    }
+    println!("Starting generator with {} matches, seed {}", matches_count, seed);
 
-    println!("Starting generator with {} matches, seed {}", cfg.generation.matches_count, cfg.generation.seed);
+    let pg_pool = db::postgres::create_pool(&postgres_url).await?;
+    let mongo_client = db::mongo::create_client(&mongo_url).await?;
 
-    let pg_pool = db::postgres::create_pool(&cfg.db.postgres_url).await?;
-    let mongo_client = db::mongo::create_client(&cfg.db.mongo_url).await?;
+    sqlx::migrate!("./migrations").run(&pg_pool).await?;
 
     println!("Creating reference data...");
     generators::create_reference_data(&pg_pool).await?;
 
-    println!("Generating {} matches...", cfg.generation.matches_count);
-    let mut rng = rng::create_rng(cfg.generation.seed);
+    println!("Generating {} matches...", matches_count);
+    let mut rng = rng::create_rng(seed);
     generators::generate_matches(
         &mut rng,
         &pg_pool,
         &mongo_client,
-        cfg.generation.matches_count as usize,
-        cfg.generation.pg_batch_size,
+        matches_count,
+        1000,
     ).await?;
 
     println!("Generation completed successfully!");
