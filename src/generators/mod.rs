@@ -98,35 +98,54 @@ pub async fn generate_matches(
         }
 
         if match_batch.len() >= batch_size {
+            if !player_batch.is_empty() {
+                insert_player_batch(pg_pool, &player_batch).await?;
+                player_batch.clear();
+            }
             insert_match_batch(pg_pool, &match_batch).await?;
             match_batch.clear();
+
+            tokio::try_join!(
+                async {
+                    if !match_player_batch.is_empty() {
+                        insert_match_player_batch(pg_pool, &match_player_batch).await?;
+                        match_player_batch.clear();
+                    }
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                },
+                async {
+                    if !mongo_batch.is_empty() {
+                        mongo_collection.insert_many(&mongo_batch).await?;
+                        mongo_batch.clear();
+                    }
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                }
+            )?;
         }
-        if player_batch.len() >= batch_size {
-            insert_player_batch(pg_pool, &player_batch).await?;
-            player_batch.clear();
-        }
-        if match_player_batch.len() >= batch_size {
-            insert_match_player_batch(pg_pool, &match_player_batch).await?;
-            match_player_batch.clear();
-        }
-        if mongo_batch.len() >= batch_size {
-            mongo_collection.insert_many(&mongo_batch).await?;
-            mongo_batch.clear();
-        }
+
     }
 
-    if !match_batch.is_empty() {
-        insert_match_batch(pg_pool, &match_batch).await?;
-    }
     if !player_batch.is_empty() {
         insert_player_batch(pg_pool, &player_batch).await?;
     }
-    if !match_player_batch.is_empty() {
-        insert_match_player_batch(pg_pool, &match_player_batch).await?;
+    if !match_batch.is_empty() {
+        insert_match_batch(pg_pool, &match_batch).await?;
     }
-    if !mongo_batch.is_empty() {
-        mongo_collection.insert_many(&mongo_batch).await?;
-    }
+
+    tokio::try_join!(
+        async {
+            if !match_player_batch.is_empty() {
+                insert_match_player_batch(pg_pool, &match_player_batch).await?;
+            }
+            Ok::<(), Box<dyn std::error::Error>>(())
+        },
+        async {
+            if !mongo_batch.is_empty() {
+                mongo_collection.insert_many(&mongo_batch).await?;
+            }
+            Ok::<(), Box<dyn std::error::Error>>(())
+        }
+    )?;
 
     Ok(())
 }
