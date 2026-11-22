@@ -1,12 +1,32 @@
+//! Data generation orchestration and batch insertion logic.
+//!
+//! This module coordinates the generation of matches, players, and events,
+//! and manages batched inserts into PostgreSQL and MongoDB to optimize
+//! performance and reduce database load.
+
 pub mod events;
 pub mod matches;
 pub mod player;
 
 use sqlx::PgPool;
 use mongodb::Client;
-use crate::generators::matches::generate_match;
+use crate::generators::matches::{generate_match, MatchRecord};
+use crate::generators::player::{PlayerRecord, MatchPlayerRecord};
 use std::collections::HashSet;
 
+/// Inserts foundational reference data into the PostgreSQL database.
+///
+/// This function populates the `heroes` and `npcs` tables with baseline
+/// records required for match generation, such as the Roshan NPC (ID 133).
+/// It uses `ON CONFLICT DO NOTHING` to ensure idempotency.
+///
+/// # Arguments
+///
+/// * `pg_pool` - A reference to the PostgreSQL connection pool.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `sqlx::Error` on failure.
 pub async fn create_reference_data(pg_pool: &PgPool) -> Result<(), sqlx::Error> {
     // Heroes
     sqlx::query(
@@ -26,6 +46,23 @@ pub async fn create_reference_data(pg_pool: &PgPool) -> Result<(), sqlx::Error> 
     Ok(())
 }
 
+/// Generates and persists a specified number of matches and their associated data.
+///
+/// This function orchestrates the creation of match records, player records,
+/// and MongoDB event documents. It accumulates generated data in memory and
+/// flushes it to the databases in batches to optimize I/O performance.
+///
+/// # Arguments
+///
+/// * `rng` - A mutable reference to a random number generator.
+/// * `pg_pool` - A reference to the PostgreSQL connection pool.
+/// * `mongo_client` - A reference to the MongoDB client.
+/// * `matches_count` - The total number of matches to generate.
+/// * `batch_size` - The maximum number of records to accumulate before flushing.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a boxed error on failure.
 pub async fn generate_matches(
     rng: &mut impl rand::Rng,
     pg_pool: &PgPool,
@@ -94,7 +131,17 @@ pub async fn generate_matches(
     Ok(())
 }
 
-async fn insert_match_batch(pg_pool: &PgPool, batch: &[matches::MatchRecord]) -> Result<(), sqlx::Error> {
+/// Inserts a batch of match records into the PostgreSQL database.
+///
+/// # Arguments
+///
+/// * `pg_pool` - A reference to the PostgreSQL connection pool.
+/// * `batch` - A slice of `MatchRecord` instances to insert.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `sqlx::Error` on failure.
+async fn insert_match_batch(pg_pool: &PgPool, batch: &[MatchRecord]) -> Result<(), sqlx::Error> {
     for m in batch {
         sqlx::query(
             "INSERT INTO matches (match_id, match_seq_num, start_time, duration, game_mode, lobby_type, radiant_win, radiant_score, dire_score, tower_status_radiant, tower_status_dire, barracks_status_radiant, barracks_status_dire, cluster, first_blood_time, human_players, loaded_at, stratz_parsed_at, discover_run_id, enrich_run_id, enrichment_attempts)
@@ -121,7 +168,19 @@ async fn insert_match_batch(pg_pool: &PgPool, batch: &[matches::MatchRecord]) ->
     Ok(())
 }
 
-async fn insert_player_batch(pg_pool: &PgPool, batch: &[player::PlayerRecord]) -> Result<(), sqlx::Error> {
+/// Inserts a batch of player records into the PostgreSQL database.
+///
+/// Uses `ON CONFLICT DO UPDATE` to ensure idempotent upserts based on `account_id`.
+///
+/// # Arguments
+///
+/// * `pg_pool` - A reference to the PostgreSQL connection pool.
+/// * `batch` - A slice of `PlayerRecord` instances to insert.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `sqlx::Error` on failure.
+async fn insert_player_batch(pg_pool: &PgPool, batch: &[PlayerRecord]) -> Result<(), sqlx::Error> {
     for p in batch {
         sqlx::query(
             "INSERT INTO players (account_id, personaname, loaded_at)
@@ -135,7 +194,20 @@ async fn insert_player_batch(pg_pool: &PgPool, batch: &[player::PlayerRecord]) -
     Ok(())
 }
 
-async fn insert_match_player_batch(pg_pool: &PgPool, batch: &[player::MatchPlayerRecord]) -> Result<(), sqlx::Error> {
+/// Inserts a batch of match-player records into the PostgreSQL database.
+///
+/// Uses `ON CONFLICT DO NOTHING` to prevent duplicate entries for the same
+/// `(match_id, player_slot)` combination.
+///
+/// # Arguments
+///
+/// * `pg_pool` - A reference to the PostgreSQL connection pool.
+/// * `batch` - A slice of `MatchPlayerRecord` instances to insert.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `sqlx::Error` on failure.
+async fn insert_match_player_batch(pg_pool: &PgPool, batch: &[MatchPlayerRecord]) -> Result<(), sqlx::Error> {
     for mp in batch {
         sqlx::query(
             "INSERT INTO match_players (match_id, player_slot, account_id, hero_id, item_0, item_1, item_2, item_3, item_4, item_5, backpack_0, backpack_1, backpack_2, item_neutral, kills, deaths, assists, kda, gold, gold_per_min, xp_per_min, gold_spent, net_worth, hero_damage, tower_damage, hero_healing, level, last_hits, denies, is_radiant, win, aghanims_scepter, aghanims_shard, rank, loaded_at)

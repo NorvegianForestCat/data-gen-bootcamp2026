@@ -1,49 +1,103 @@
+//! Player and match-player record generation logic.
+//!
+//! This module provides functions to generate synthetic player profiles
+//! and their corresponding in-match statistics, ensuring data conforms
+//! to the expected database schema.
+
 use rand::Rng;
 
+/// Represents a unique player profile.
 #[derive(Clone)]
 pub struct PlayerRecord {
+    /// Unique Steam account identifier.
     pub account_id: i64,
+    /// Display name of the player.
     pub personaname: String,
 }
 
+/// Represents a player's statistics and state within a specific match.
 #[derive(Clone)]
 pub struct MatchPlayerRecord {
+    /// Unique identifier of the match.
     pub match_id: i64,
+    /// Slot identifier (0-4 for Radiant, 128-132 for Dire).
     pub player_slot: i32,
+    /// Unique Steam account identifier of the player.
     pub account_id: i64,
+    /// Identifier of the hero played.
     pub hero_id: i32,
+    /// Item in slot 0.
     pub item_0: Option<i32>,
+    /// Item in slot 1.
     pub item_1: Option<i32>,
+    /// Item in slot 2.
     pub item_2: Option<i32>,
+    /// Item in slot 3.
     pub item_3: Option<i32>,
+    /// Item in slot 4.
     pub item_4: Option<i32>,
+    /// Item in slot 5.
     pub item_5: Option<i32>,
+    /// Item in backpack slot 0.
     pub backpack_0: Option<i32>,
+    /// Item in backpack slot 1.
     pub backpack_1: Option<i32>,
+    /// Item in backpack slot 2.
     pub backpack_2: Option<i32>,
+    /// Neutral item equipped.
     pub item_neutral: Option<i32>,
+    /// Total number of kills.
     pub kills: i32,
+    /// Total number of deaths.
     pub deaths: i32,
+    /// Total number of assists.
     pub assists: i32,
+    /// Kill-Death-Assist ratio.
     pub kda: f32,
+    /// Gold held at the end of the match.
     pub gold: i32,
+    /// Average gold earned per minute.
     pub gold_per_min: i32,
+    /// Average experience earned per minute.
     pub xp_per_min: i32,
+    /// Total gold spent during the match.
     pub gold_spent: i32,
+    /// Total net worth (gold + gold_spent).
     pub net_worth: i32,
+    /// Total damage dealt to heroes.
     pub hero_damage: i32,
+    /// Total damage dealt to towers.
     pub tower_damage: i32,
+    /// Total healing provided to allies.
     pub hero_healing: i32,
+    /// Final hero level.
     pub level: i32,
+    /// Total number of last hits.
     pub last_hits: i32,
+    /// Total number of denies.
     pub denies: i32,
+    /// Whether the player was on the Radiant team.
     pub is_radiant: bool,
+    /// Whether the player's team won the match.
     pub win: bool,
+    /// Whether the player purchased Aghanim's Scepter.
     pub aghanims_scepter: bool,
+    /// Whether the player purchased Aghanim's Shard.
     pub aghanims_shard: bool,
+    /// Player's MMR rank bracket (1-80).
     pub rank: i32,
 }
 
+/// Generates a synthetic player profile.
+///
+/// # Arguments
+///
+/// * `rng` - A mutable reference to a random number generator.
+/// * `account_id` - The unique account identifier to assign to this player.
+///
+/// # Returns
+///
+/// A `PlayerRecord` with a generated `personaname`.
 pub fn generate_player_record(rng: &mut impl Rng, account_id: i64) -> PlayerRecord {
     let prefixes = ["xX", "Pro", "Noob", "Dota", "Shadow", "Dark", "Light", "Super"];
     let suffixes = ["_gamer", "123", "OP", "GG", "_dota", "killer", "master", "pro"];
@@ -64,6 +118,20 @@ pub fn generate_player_record(rng: &mut impl Rng, account_id: i64) -> PlayerReco
     }
 }
 
+/// Generates synthetic statistics for a player within a specific match.
+///
+/// # Arguments
+///
+/// * `rng` - A mutable reference to a random number generator.
+/// * `match_id` - The unique identifier of the match.
+/// * `player_slot` - The player's slot (0-4 or 128-132).
+/// * `duration` - The total duration of the match in seconds.
+/// * `radiant_win` - Whether the Radiant team won the match.
+/// * `is_radiant` - Whether this specific player is on the Radiant team.
+///
+/// # Returns
+///
+/// A `MatchPlayerRecord` populated with randomized but realistic statistics.
 pub fn generate_match_player_record(
     rng: &mut impl Rng,
     match_id: i64,
