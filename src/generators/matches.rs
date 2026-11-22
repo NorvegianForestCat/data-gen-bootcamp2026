@@ -32,7 +32,7 @@ pub struct GeneratedMatch {
 }
 
 pub fn generate_match(rng: &mut impl Rng, match_id: i64, match_seq_num: i64) -> GeneratedMatch {
-    let duration: i32 = rng.gen_range(600..3600); // 10-60 минут
+    let duration: i32 = rng.gen_range(600..3600);
     let game_mode: i32 = *[1, 2, 3, 22].choose(rng).unwrap();
     let lobby_type: i32 = *[0, 7].choose(rng).unwrap();
     let radiant_win: bool = rng.gen_bool(0.5);
@@ -82,13 +82,12 @@ pub fn generate_match(rng: &mut impl Rng, match_id: i64, match_seq_num: i64) -> 
         player_records.push(mp);
     }
 
-    // Генерация событий
     for (i, &acc_id) in account_ids.iter().enumerate() {
         let player_slot = if i < 5 { i } else { 128 + (i - 5) };
         let is_radiant = i < 5;
         
         if rng.gen_bool(0.15) {
-            let roshan_time = rng.gen_range(600..(duration - 300)).max(600);
+            let roshan_time = rng.gen_range(600..(duration - 300)).max(601);
             mongo_events.push(generate_cs_event(match_id, acc_id, roshan_time, 133));
             mongo_events.push(generate_gold_event(match_id, acc_id, roshan_time, 200, "ROSHAN", 133));
         }
