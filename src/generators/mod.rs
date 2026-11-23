@@ -73,12 +73,19 @@ pub async fn generate_matches(
     matches_count: usize,
     batch_size: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mongo_collection = mongo_client.database("dota_events").collection::<bson::Document>("cs_events");
+    let db = mongo_client.database("dota_events");
+    let cs_collection = db.collection::<bson::Document>("cs_events");
+    let gold_collection = db.collection::<bson::Document>("gold_events");
+    let kill_collection = db.collection::<bson::Document>("kill_events");
+    let tower_death_collection = db.collection::<bson::Document>("tower_death_events");
     
     let mut match_batch = Vec::new();
     let mut player_batch = Vec::new();
     let mut match_player_batch = Vec::new();
-    let mut mongo_batch = Vec::new();
+    let mut cs_batch = Vec::new();
+    let mut gold_batch = Vec::new();
+    let mut kill_batch = Vec::new();
+    let mut tower_death_batch = Vec::new();
     let mut seen_players = HashSet::new();
     let mut match_seq_num = 1_000_000_000i64;
 
@@ -96,9 +103,10 @@ pub async fn generate_matches(
         for mp in generated.player_records {
             match_player_batch.push(mp);
         }
-        for event in generated.mongo_events {
-            mongo_batch.push(event);
-        }
+        cs_batch.extend(generated.mongo_events.cs_events);
+        gold_batch.extend(generated.mongo_events.gold_events);
+        kill_batch.extend(generated.mongo_events.kill_events);
+        tower_death_batch.extend(generated.mongo_events.tower_death_events);
 
         if match_batch.len() >= batch_size {
             if !player_batch.is_empty() {
@@ -117,9 +125,21 @@ pub async fn generate_matches(
                     Ok::<(), Box<dyn std::error::Error>>(())
                 },
                 async {
-                    if !mongo_batch.is_empty() {
-                        mongo_collection.insert_many(&mongo_batch).await?;
-                        mongo_batch.clear();
+                    if !cs_batch.is_empty() {
+                        cs_collection.insert_many(&cs_batch).await?;
+                        cs_batch.clear();
+                    }
+                    if !gold_batch.is_empty() {
+                        gold_collection.insert_many(&gold_batch).await?;
+                        gold_batch.clear();
+                    }
+                    if !kill_batch.is_empty() {
+                        kill_collection.insert_many(&kill_batch).await?;
+                        kill_batch.clear();
+                    }
+                    if !tower_death_batch.is_empty() {
+                        tower_death_collection.insert_many(&tower_death_batch).await?;
+                        tower_death_batch.clear();
                     }
                     Ok::<(), Box<dyn std::error::Error>>(())
                 }
@@ -143,8 +163,17 @@ pub async fn generate_matches(
             Ok::<(), Box<dyn std::error::Error>>(())
         },
         async {
-            if !mongo_batch.is_empty() {
-                mongo_collection.insert_many(&mongo_batch).await?;
+            if !cs_batch.is_empty() {
+                cs_collection.insert_many(&cs_batch).await?;
+            }
+            if !gold_batch.is_empty() {
+                gold_collection.insert_many(&gold_batch).await?;
+            }
+            if !kill_batch.is_empty() {
+                kill_collection.insert_many(&kill_batch).await?;
+            }
+            if !tower_death_batch.is_empty() {
+                tower_death_collection.insert_many(&tower_death_batch).await?;
             }
             Ok::<(), Box<dyn std::error::Error>>(())
         }

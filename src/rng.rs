@@ -18,3 +18,35 @@ use rand_chacha::ChaCha8Rng;
 pub fn create_rng(seed: u64) -> ChaCha8Rng {
     ChaCha8Rng::seed_from_u64(seed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+
+    #[test]
+    fn test_reproducible_rng() {
+        let seed = 42;
+        let mut rng1 = create_rng(seed);
+        let mut rng2 = create_rng(seed);
+
+        for _ in 0..10 {
+            assert_eq!(rng1.gen::<u32>(), rng2.gen::<u32>());
+        }
+    }
+
+    #[test]
+    fn test_different_seeds_produce_different_results() {
+        let mut rng1 = create_rng(42);
+        let mut rng2 = create_rng(43);
+
+        assert_ne!(rng1.gen::<u32>(), rng2.gen::<u32>());
+    }
+
+    #[test]
+    fn test_rng_generates_in_valid_range() {
+        let mut rng = create_rng(123);
+        let val: u32 = rng.gen_range(1u32..=100u32);
+        assert!(val >= 1 && val <= 100);
+    }
+}

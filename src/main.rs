@@ -28,7 +28,6 @@ struct Args {
     seed: u64,
 }
 
-mod config;
 mod db;
 mod generators;
 mod rng;

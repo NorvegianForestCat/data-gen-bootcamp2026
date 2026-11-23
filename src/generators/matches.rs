@@ -48,6 +48,14 @@ pub struct MatchRecord {
     pub human_players: i32,
 }
 
+/// Aggregated MongoDB events for a single match, separated by collection.
+pub struct MongoEvents {
+    pub cs_events: Vec<Document>,
+    pub gold_events: Vec<Document>,
+    pub kill_events: Vec<Document>,
+    pub tower_death_events: Vec<Document>,
+}
+
 /// Aggregated output of a single match generation cycle.
 pub struct GeneratedMatch {
     /// The core match metadata.
@@ -57,7 +65,7 @@ pub struct GeneratedMatch {
     /// Unique player profiles encountered in this match.
     pub unique_players: Vec<PlayerRecord>,
     /// MongoDB event documents associated with this match.
-    pub mongo_events: Vec<Document>,
+    pub mongo_events: MongoEvents,
 }
 
 /// Generates a complete match dataset including metadata, players, and events.
@@ -108,7 +116,12 @@ pub fn generate_match(rng: &mut impl Rng, match_id: i64, match_seq_num: i64) -> 
 
     let mut player_records = Vec::new();
     let mut unique_players = Vec::new();
-    let mut mongo_events = Vec::new();
+    let mut mongo_events = MongoEvents {
+        cs_events: Vec::new(),
+        gold_events: Vec::new(),
+        kill_events: Vec::new(),
+        tower_death_events: Vec::new(),
+    };
 
     let mut account_ids = Vec::new();
     for i in 0..10 {
@@ -122,20 +135,17 @@ pub fn generate_match(rng: &mut impl Rng, match_id: i64, match_seq_num: i64) -> 
         player_records.push(mp);
     }
 
-    for (i, &acc_id) in account_ids.iter().enumerate() {
-        let player_slot = if i < 5 { i } else { 128 + (i - 5) };
-        let _is_radiant = i < 5; // Kept for potential future correlation logic
-        
+    for (_i, &acc_id) in account_ids.iter().enumerate() {
         if rng.gen_bool(0.15) {
             let roshan_time = rng.gen_range(600..(duration - 300).max(601));
-            mongo_events.push(generate_cs_event(match_id, acc_id, roshan_time, 133));
-            mongo_events.push(generate_gold_event(match_id, acc_id, roshan_time, 200, "ROSHAN", 133));
+            mongo_events.cs_events.push(generate_cs_event(match_id, acc_id, roshan_time, 133));
+            mongo_events.gold_events.push(generate_gold_event(match_id, acc_id, roshan_time, 200, "ROSHAN", 133));
         }
         
         if rng.gen_bool(0.4) {
             let kill_time = rng.gen_range(0..duration);
             let target_id = 100_000_000 + rng.gen_range(0..900_000_000);
-            mongo_events.push(generate_kill_event(
+            mongo_events.kill_events.push(generate_kill_event(
                 match_id, acc_id, kill_time, 
                 rng.gen_range(200..500), 
                 rng.gen_range(200..500),
@@ -146,7 +156,7 @@ pub fn generate_match(rng: &mut impl Rng, match_id: i64, match_seq_num: i64) -> 
 
     if rng.gen_bool(0.7) {
         let tower_time = rng.gen_range(300..duration);
-        mongo_events.push(generate_tower_death_event(match_id, tower_time, if radiant_win { 2047 } else { 0 }, if radiant_win { 0 } else { 2047 }));
+        mongo_events.tower_death_events.push(generate_tower_death_event(match_id, tower_time, if radiant_win { 2047 } else { 0 }, if radiant_win { 0 } else { 2047 }));
     }
 
     GeneratedMatch {
@@ -154,5 +164,63 @@ pub fn generate_match(rng: &mut impl Rng, match_id: i64, match_seq_num: i64) -> 
         player_records,
         unique_players,
         mongo_events,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand_chacha::ChaCha8Rng;
+    use rand::SeedableRng;
+
+    #[test]
+    fn test_generate_match_structure() {
+        let mut rng = ChaCha8Rng::seed_from_u64(42);
+        let match_data = generate_match(&mut rng, 12345, 67890);
+
+        assert_eq!(match_data.match_record.match_id, 12345);
+        assert_eq!(match_data.match_record.match_seq_num, 67890);
+        assert_eq!(match_data.match_record.human_players, 10);
+        assert_eq!(match_data.player_records.len(), 10);
+        assert_eq!(match_data.unique_players.len(), 10);
+        
+        // Check that all player_slots are correct (0-4 for Radiant, 128-132 for Dire)
+        for (i, player) in match_data.player_records.iter().enumerate() {
+            if i < 5 {
+                assert!(player.player_slot < 5);
+            } else {
+                assert!(player.player_slot >= 128);
+            }
+        }
+    }
+
+    #[test]
+    fn test_match_duration_bounds() {
+        let mut rng = ChaCha8Rng::seed_from_u64(100);
+        for _ in 0..100 {
+            let match_data = generate_match(&mut rng, 1, 1);
+            assert!(match_data.match_record.duration >= 600);
+            assert!(match_data.match_record.duration <= 3600);
+        }
+    }
+
+    #[test]
+    fn test_mongo_events_structure() {
+        let mut rng = ChaCha8Rng::seed_from_u64(999);
+        let match_data = generate_match(&mut rng, 1, 1);
+
+        // Verify that all events have the correct match_id
+        for event in &match_data.mongo_events.cs_events {
+            assert_eq!(event.get_i64("match_id").unwrap(), 1);
+        }
+        for event in &match_data.mongo_events.gold_events {
+            assert_eq!(event.get_i64("match_id").unwrap(), 1);
+        }
+        for event in &match_data.mongo_events.kill_events {
+            assert_eq!(event.get_i64("match_id").unwrap(), 1);
+        }
+        for event in &match_data.mongo_events.tower_death_events {
+            assert_eq!(event.get_i64("match_id").unwrap(), 1);
+        }
     }
 }
